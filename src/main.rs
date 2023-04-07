@@ -190,6 +190,7 @@ fn run(cli: YanuCli) -> Result<()> {
                     any(target_os = "windows", target_os = "linux")
                 ))]
                 {
+                    println!("{}{:?}", "The path is 2: ", DEFAULT_PRODKEYS_PATH.to_str().unwrap());
                     if !DEFAULT_PRODKEYS_PATH.is_file() {
                         rfd::MessageDialog::new()
                             .set_level(rfd::MessageLevel::Warning)
