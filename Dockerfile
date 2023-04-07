@@ -16,16 +16,8 @@ RUN ln -s /usr/bin/gcc-nm-12 /usr/bin/gcc-nm
 RUN curl https://sh.rustup.rs | sh -s -- -y
 
 COPY . .
+WORKDIR /work/yanu-cli
 RUN $HOME/.cargo/bin/cargo build --release
-RUN mv target/release/yanu /usr/bin/
-
-# Needed to trigger 3th deps build
-RUN touch base.nsp && touch update.nsp
-RUN mkdir $HOME/.switch
-RUN touch $HOME/.switch/prod.keys
-RUN yanu update --base base.nsp --patch update.nsp || true
-
-# Clean
-RUN rm base.nsp
-RUN rm update.nsp
-RUN rm $HOME/.switch/prod.keys
+WORKDIR /work
+RUN mv target/release/yanu-cli /usr/bin/yanu
+RUN yanu build-backend
