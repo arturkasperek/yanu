@@ -3,19 +3,19 @@ use std::path::PathBuf;
 use clap::{Args, Parser, Subcommand};
 
 #[derive(Debug, Parser)]
-#[command(author, version, about, long_about = None)]
+#[command(author, version, about, long_about = None, arg_required_else_help = true)]
 pub struct YanuCli {
     #[command(subcommand)]
     pub command: Option<Commands>,
     /// Import `prod.keys` keyfile
-    #[arg(long, value_name = "FILE")]
+    #[arg(short = 'k', long, value_name = "FILE")]
     pub import_keyfile: Option<PathBuf>,
 }
 
 #[derive(Debug, Subcommand)]
 pub enum Commands {
-    /// Update NSPs in CLI mode
-    #[command(short_flag = 'U')]
+    /// Update NSPs
+    #[command()]
     Update(Update),
     /// Repack to NSP
     #[command()]
@@ -24,11 +24,15 @@ pub enum Commands {
     #[command()]
     Unpack(Unpack),
     /// Manage yanu's config
-    #[command()]
+    #[command(visible_alias = "cfg")]
     Config(Config),
     /// Update NSPs in TUI mode
     #[command()]
-    Tui,
+    UpdateTui,
+    #[cfg(unix)]
+    /// Build backend utilities
+    #[command()]
+    BuildBackend,
 }
 
 #[derive(Debug, Args, Default, PartialEq, Eq)]
@@ -37,9 +41,9 @@ pub struct Update {
     /// Select base package
     #[arg(short, long, value_name = "FILE")]
     pub base: PathBuf,
-    /// Select patch package
+    /// Select update package
     #[arg(short, long, value_name = "FILE")]
-    pub patch: PathBuf,
+    pub update: PathBuf,
     #[arg(short, long, value_name = "DIR")]
     pub outdir: Option<PathBuf>,
 }
@@ -63,9 +67,9 @@ pub struct Unpack {
     /// Select base package
     #[arg(short, long, value_name = "FILE")]
     pub base: PathBuf,
-    /// Select patch package
+    /// Select update package
     #[arg(short, long, value_name = "FILE")]
-    pub patch: Option<PathBuf>,
+    pub update: Option<PathBuf>,
     #[arg(short, long, value_name = "DIR")]
     pub outdir: Option<PathBuf>,
 }
@@ -73,7 +77,11 @@ pub struct Unpack {
 #[derive(Debug, Args, Default, PartialEq, Eq)]
 #[command(arg_required_else_help = true)]
 pub struct Config {
-    /// Set roms directory path
-    #[arg(long, value_name = "PATH")]
+    /// Set roms directory path, used in TUI to look for ROMS
+    #[arg(long, value_name = "DIR")]
     pub roms_dir: Option<PathBuf>,
+    /// Temp files will be stored here while patching,
+    /// PATH must not contain Unicode characters due to a limitation of Backend tools
+    #[arg(long, value_name = "DIR")]
+    pub temp_dir: Option<PathBuf>,
 }

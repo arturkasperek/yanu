@@ -35,7 +35,7 @@ Precompiled binaries are available from the [GitHub releases page](https://githu
 1. Download & Install `Termux` from [F-droid](https://f-droid.org/en/packages/com.termux/).
 2. Copy-paste the following in `Termux` and hit enter:
   ```console
-  bash <(curl -L https://raw.githubusercontent.com/nozwock/yanu/main/resources/scripts/yanu-bootstrap-termux_proot.sh)
+  bash <(curl -L https://raw.githubusercontent.com/nozwock/yanu/main/resources/scripts/yanu-bootstrap-termux.sh)
   ```
 
 Relevant resources:
@@ -106,8 +106,8 @@ yanu repack --controlnca "./base+update.bylies/patchdata/123456.nca" --romfsdir 
 | Used for | Windows | Linux |
 | --- | --- | --- |
 | Keys | `%USERPROFILE%\.switch` | `$HOME/.switch` |
-| Cache | `%LOCALAPPDATA%\com.github.nozwock.yanu` | `$HOME/.config/com.github.nozwock.yanu` |
-| Config | `%APPDATA%\com.github.nozwock.yanu` | `$HOME/.cache/com.github.nozwock.yanu` |
+| Cache | `%LOCALAPPDATA%\com.github.nozwock.yanu` | `$HOME/.cache/com.github.nozwock.yanu` |
+| Config | `%APPDATA%\com.github.nozwock.yanu` | `$HOME/.config/com.github.nozwock.yanu` |
 
 ## Special Thanks
 

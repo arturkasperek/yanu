@@ -1,4 +1,5 @@
 use std::{
+    collections::{HashMap, HashSet},
     ffi::OsStr,
     fmt,
     path::{Path, PathBuf},
@@ -21,7 +22,7 @@ pub struct Nsp {
     pub title_key: Option<TitleKey>,
 }
 
-#[derive(Debug, Clone, EnumString, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, EnumString, PartialEq, Eq, Hash)]
 pub enum NcaType {
     Control,
     Program,
@@ -41,6 +42,8 @@ pub struct Nca {
     pub title_id: Option<String>, //? does every NCA have TittleID?
     pub content_type: NcaType,
 }
+
+// TODO: instead of this, add the stdout to logs at the end
 
 impl Nsp {
     pub fn new<P: AsRef<Path>>(path: P) -> Result<Self> {
@@ -78,13 +81,14 @@ impl Nsp {
         let output = cmd.output()?;
         if !output.status.success() {
             error!(
+                backend = ?extractor.kind(),
                 stderr = %String::from_utf8(output.stderr)?,
                 "Encountered an error while unpacking NSP"
             );
             bail!("Failed to extract \"{}\"", self.path.display());
         }
 
-        info!(?self.path, to = ?to.as_ref(), "Extraction done");
+        info!(?self.path, to = ?to.as_ref(), "Extraction done!");
         Ok(())
     }
     pub fn pack<K, P, Q>(
@@ -117,7 +121,8 @@ impl Nsp {
         let output = cmd.output()?;
         if !output.status.success() {
             error!(
-                exit_code = ?output.status.code(),
+                backend = ?packer.kind(),
+                code = ?output.status.code(),
                 stderr = %String::from_utf8(output.stderr)?,
                 "Encountered an error while packing NCAs to NSP"
             );
@@ -159,7 +164,7 @@ impl Nsp {
 }
 
 impl Nca {
-    pub fn new<P: AsRef<Path>>(extractor: &Backend, path: P) -> Result<Self> {
+    pub fn new<P: AsRef<Path>>(reader: &Backend, path: P) -> Result<Self> {
         if path.as_ref().is_file()
             && path
                 .as_ref()
@@ -177,37 +182,39 @@ impl Nca {
         }
 
         info!(
-            nca = ?path.as_ref(),
+            nca = %path.as_ref().display(),
             "Identifying TitleID and ContentType",
         );
 
-        let output = Command::new(extractor.path())
-            .args([path.as_ref()])
-            .output()?; // Capture stdout aswell :-)
+        let output = Command::new(reader.path()).args([path.as_ref()]).output()?; // Capture stdout aswell :-)
         if !output.status.success() {
             warn!(
-                nca = ?path.as_ref(),
+                nca = %path.as_ref().display(),
+                backend = ?reader.kind(),
                 stderr = %String::from_utf8(output.stderr)?,
                 "Encountered an error while viewing info",
             );
+        } else {
+            let stderr = std::str::from_utf8(output.stderr.as_slice())?
+                .lines()
+                .filter(|line| !line.to_lowercase().contains("failed to match key"))
+                .collect::<Vec<_>>()
+                .join("\n");
+            if !stderr.trim().is_empty() {
+                warn!(backend = ?reader.kind(), %stderr);
+            }
         }
 
         let stdout = String::from_utf8(output.stdout)?;
         let mut title_id: Option<String> = None;
-        let title_id_pat = match extractor.kind() {
-            BackendKind::Hactool => "Title ID:",
+        let title_id_pat = match reader.kind() {
             #[cfg(all(
                 target_arch = "x86_64",
                 any(target_os = "windows", target_os = "linux")
             ))]
             BackendKind::Hactoolnet => "TitleID:",
-            #[cfg(any(
-                feature = "android-proot",
-                all(
-                    target_arch = "x86_64",
-                    any(target_os = "windows", target_os = "linux")
-                )
-            ))]
+            // On all supported platforms
+            BackendKind::Hactool => "Title ID:",
             BackendKind::Hac2l => "Program Id:",
             _ => unreachable!(),
         };
@@ -228,12 +235,23 @@ impl Nca {
         let mut content_type: Option<NcaType> = None;
         for line in stdout.lines() {
             if line.contains("Content Type:") {
-                content_type = Some(NcaType::from_str(
+                content_type = match NcaType::from_str(
                     line.trim()
                         .split(' ')
                         .last()
                         .ok_or_else(|| eyre!("ContentType line should've an item"))?,
-                )?);
+                ) {
+                    Ok(content_type) => Some(content_type),
+                    Err(err) => {
+                        warn!(
+                            nca = %path.as_ref().display(),
+                            backend = ?reader.kind(),
+                            stdout = %stdout,
+                            "Dumping stdout"
+                        );
+                        bail!(err);
+                    }
+                };
                 debug!(?content_type);
                 break;
             }
@@ -272,7 +290,8 @@ impl Nca {
         let output = cmd.output()?;
         if !output.status.success() {
             error!(
-                exit_code = ?output.status.code(),
+                backend = ?extractor.kind(),
+                code = ?output.status.code(),
                 stderr = %String::from_utf8(output.stderr)?,
                 "Encountered an error while unpacking NCAs"
             );
@@ -288,14 +307,13 @@ impl Nca {
         Ok(())
     }
     pub fn pack<P, Q, R, K>(
-        extractor: &Backend,
         packer: &Backend,
         title_id: &str,
         keyfile: K,
         romfs_dir: P,
         exefs_dir: Q,
         outdir: R,
-    ) -> Result<Nca>
+    ) -> Result<PathBuf>
     where
         P: AsRef<Path>,
         Q: AsRef<Path>,
@@ -330,6 +348,7 @@ impl Nca {
         let output = cmd.output()?;
         if !output.status.success() {
             error!(
+                backend = ?packer.kind(),
                 exit_code = ?output.status.code(),
                 stderr = %String::from_utf8(output.stderr)?,
                 "Encountered an error while packing FS files to NCA"
@@ -343,10 +362,10 @@ impl Nca {
             .into_iter()
             .filter_map(|e| e.ok())
         {
-            if let Some("nca") = entry.path().extension().and_then(OsStr::to_str) {
-                info!(outdir = ?outdir.as_ref(), "Packing done");
-                // do this sep if in need of fallbacks
-                return Nca::new(extractor, entry.path());
+            if entry.path().extension() == Some("nca".as_ref()) {
+                info!(outdir = %outdir.as_ref().display(), "Packing done");
+                info!(nca = %entry.path().display(), "Should be the Patched NCA");
+                return Ok(entry.into_path());
             }
         }
         bail!("Failed to pack romfs/exefs to NCA");
@@ -387,7 +406,8 @@ impl Nca {
         let output = cmd.output()?;
         if !output.status.success() {
             error!(
-                exit_code = ?output.status.code(),
+                backend = ?packer.kind(),
+                code = ?output.status.code(),
                 stderr = %String::from_utf8(output.stderr)?,
                 "Encountered an error while generating Meta NCA"
             );
@@ -397,4 +417,66 @@ impl Nca {
         info!(outdir = ?outdir.as_ref(), "Generated Meta NCA");
         Ok(())
     }
+}
+
+/// Returns filtered NCAs in descending order of size.
+///
+/// So for eg-
+/// ```
+/// // This'll return the largest Control type NCA in ""
+/// get_filtered_ncas(
+///     Backend::new(BackendKind::Hactoolnet),
+///     "",
+///     HashSet::from([NcaType::Control]),
+/// )
+/// .get(&NcaType::Control)
+/// .unwrap()[0];
+/// ```
+pub fn get_filtered_ncas<P>(
+    reader: &Backend,
+    from: P,
+    filters: &HashSet<NcaType>,
+) -> HashMap<NcaType, Vec<Nca>>
+where
+    P: AsRef<Path>,
+{
+    let mut filtered_ncas = HashMap::new();
+
+    for entry in WalkDir::new(from.as_ref())
+        .min_depth(1)
+        // Sort by descending order of size
+        .sort_by_key(|entry| {
+            std::cmp::Reverse(entry.metadata().map_or_else(|_e| 0, |meta| meta.len()))
+        })
+        .into_iter()
+        .filter_map(|entry| match entry {
+            Ok(entry) => {
+                if entry.path().extension() == Some("nca".as_ref()) {
+                    Some(entry)
+                } else {
+                    None
+                }
+            }
+            Err(err) => {
+                warn!(%err);
+                None
+            }
+        })
+    {
+        match Nca::new(reader, entry.path()) {
+            Ok(nca) => {
+                if filters.contains(&nca.content_type) {
+                    filtered_ncas
+                        .entry(nca.content_type)
+                        .or_insert(vec![])
+                        .push(nca);
+                }
+            }
+            Err(err) => {
+                warn!(%err);
+            }
+        }
+    }
+
+    filtered_ncas
 }
