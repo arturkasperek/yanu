@@ -1,7 +1,5 @@
 FROM ubuntu:lunar
 
-# docker run --entrypoint /bin/bash -v /Users/artur/vm_shared/Merge/prod.keys:/root/.switch/prod.keys -v /Users/artur/vm_shared/Merge:/work/nsp -it test
-
 WORKDIR /work
 
 RUN apt update
