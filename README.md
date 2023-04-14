@@ -22,7 +22,6 @@ Precompiled binaries are available from the [GitHub releases page](https://githu
 ### Supported File Types
 - [x] NSP 
 - [ ] XCI
-- [ ] NSZ
 
 > **Note** - Support for others might be added.
 
@@ -45,9 +44,9 @@ Relevant resources:
 
 ### Linux
 
-1. Make sure dependencies required to build hactool/hacPack are installed on your system.
+1. Make sure dependencies required to build hactool/hacPack are installed on your system, for eg-
    ```console
-   git gcc make binutils
+   sudo apt -y install gcc-12 g++-12 make git libjpeg-dev binutils-dev libicu-dev
    ```
 2. Download & give executable permission to `yanu`:
    ```console
@@ -116,6 +115,14 @@ yanu repack --controlnca './base+update.bylies/patchdata/123456.nca' --romfsdir 
 | Keys | `%USERPROFILE%\.switch` | `$HOME/.switch` |
 | Cache | `%LOCALAPPDATA%\com.github.nozwock.yanu` | `$HOME/.cache/com.github.nozwock.yanu` |
 | Config | `%APPDATA%\com.github.nozwock.yanu` | `$HOME/.config/com.github.nozwock.yanu` |
+
+## Troubleshooting
+
+- For "Failed to sync package repos" like errors while trying to install `yanu` on Termux:
+   - Update your outdated repos using:
+      ```sh
+      termux-change-repo
+      ```
 
 ## Special Thanks
 
